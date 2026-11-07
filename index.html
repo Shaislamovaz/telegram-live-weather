@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Weather — Telegram concept</title>
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+<div class="stage">
+  <aside class="intro">
+    <div class="kicker">Telegram · Designers × AI</div>
+    <h1>Live Weather</h1>
+    <p>The chat wallpaper follows the real weather — yours, or the person you're talking to. Snow settles on messages, rain runs down the glass, and night brings the stars.</p>
+    <ol>
+      <li>Tap the weather under the name</li>
+      <li>Pick “Mom's weather” and wait for snow to pile up</li>
+      <li>Scroll — the snow falls off</li>
+      <li>Switch to rain and send a message</li>
+    </ol>
+    <button class="play" id="playBtn">▶ Play demo</button>
+  </aside>
+
+  <div class="phone">
+    <div class="screen" id="screen">
+      <canvas id="wx-bg"></canvas>
+      <div class="chat" id="chat"><div class="msgs" id="msgs"><div class="date">Today</div></div></div>
+      <canvas id="wx-fg"></canvas>
+
+      <header class="top">
+        <div class="status">
+          <span>9:41</span>
+          <span class="sys">
+            <svg viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+            <svg viewBox="0 0 17 12" class="wifi"><path d="M8.5 11.6 6 8.9a3.6 3.6 0 0 1 5 0z"/><path d="M3.6 6.4a6.9 6.9 0 0 1 9.8 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M1 3.6a10.6 10.6 0 0 1 15 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 27 12"><rect x=".5" y=".5" width="22" height="11" rx="3" fill="none" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="17" height="8" rx="1.6"/><rect x="24" y="4" width="1.6" height="4" rx=".8" opacity=".45"/></svg>
+          </span>
+        </div>
+        <div class="bar">
+          <button class="back"><svg viewBox="0 0 13 21"><path d="M11 2 2.5 10.5 11 19"/></svg><span class="count">12</span></button>
+          <div class="peer">
+            <div class="name">Mom</div>
+            <button class="pill" id="pill"><span class="ico" id="pillIco"></span><span id="pillText">online</span></button>
+          </div>
+          <div class="avatar">M</div>
+        </div>
+      </header>
+
+      <footer class="composer">
+        <button class="icon" aria-label="Attach"><svg viewBox="0 0 24 24"><path d="M20.5 11.5 12 20a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg></button>
+        <label class="field"><input id="input" placeholder="Message" autocomplete="off"></label>
+        <button class="send" id="send" aria-label="Send"></button>
+      </footer>
+
+      <div class="backdrop" id="backdrop"></div>
+      <div class="sheet" id="sheet">
+        <div class="grab"></div>
+        <div class="sheet-title">Live Weather</div>
+        <div class="sheet-sub">The chat background follows the weather.<br>Snow settles on messages,<br>rain runs down the glass.</div>
+        <div class="group">
+          <button class="row" data-source="off"><span class="row-ico" style="background:#8e8e93" data-icon="off"></span><span class="row-text"><b>Off</b><small>Regular wallpaper</small></span><span class="radio"></span></button>
+          <button class="row" data-source="mine"><span class="row-ico" style="background:#ff9f0a" id="icoMine"></span><span class="row-text"><b>My weather</b><small id="subMine">Tashkent</small></span><span class="radio"></span></button>
+          <button class="row" data-source="peer"><span class="row-ico" style="background:#5e5ce6" id="icoPeer"></span><span class="row-text"><b>Mom's weather</b><small id="subPeer">Almaty · shared by Mom</small></span><span class="radio"></span></button>
+        </div>
+        <div class="label">PREVIEW</div>
+        <div class="chips" id="chips"></div>
+        <div class="group">
+          <div class="row"><span class="row-ico" style="background:#1c3d7a" data-icon="moon"></span><span class="row-text"><b>Night</b><small>Follows sunset at that place</small></span><button class="switch" id="nightSw" aria-label="Night"></button></div>
+        </div>
+        <div class="foot">Uses only the city, never precise location.<br>Effects pause in Power Saving mode.</div>
+      </div>
+
+      <div class="touch" id="touch"></div>
+    </div>
+  </div>
+</div>
+
+<script src="src/weather-layer.js"></script>
+<script src="src/weather-provider.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

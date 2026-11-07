@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Weather — Telegram concept</title>
+<style>
+/* Telegram Live Weather — demo UI (iOS-style Telegram chat). MIT */
+:root { font-family: Inter, -apple-system, 'SF Pro Text', Roboto, 'Helvetica Neue', sans-serif; -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #0d0f13; color: #e9edf3; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+
+/* ---------- stage (desktop presentation) ---------- */
+.stage { min-height: 100%; display: flex; align-items: center; justify-content: center; gap: 64px; padding: 32px; }
+.intro { max-width: 330px; }
+.intro .kicker { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #7fb6ff; margin-bottom: 14px; }
+.intro h1 { font-size: 34px; line-height: 1.12; margin: 0 0 14px; font-weight: 700; letter-spacing: -.02em; }
+.intro p { color: #9aa4b2; line-height: 1.55; font-size: 15px; margin: 0 0 22px; }
+.intro ol { margin: 0 0 26px; padding-left: 18px; color: #c9d1dc; line-height: 1.9; font-size: 14px; }
+.intro .play { background: #3390ec; color: #fff; border-radius: 12px; padding: 12px 18px; font-weight: 600; font-size: 15px; }
+.phone { padding: 12px; border-radius: 56px; background: #1a1c21; box-shadow: 0 0 0 1px #2a2d33, 0 40px 90px rgba(0,0,0,.55); }
+
+/* ---------- screen + theme ---------- */
+.screen {
+  --n: 0; /* 0 = day, 1 = night; animated from JS */
+  --text: color-mix(in srgb, #ffffff calc(var(--n) * 100%), #000000);
+  --sub: color-mix(in srgb, #8b9aa9 calc(var(--n) * 100%), #7c8794);
+  --accent: color-mix(in srgb, #5eb5f7 calc(var(--n) * 100%), #3390ec);
+  --bar: color-mix(in srgb, rgba(24,28,36,.9) calc(var(--n) * 100%), rgba(250,250,252,.9));
+  --bar-line: color-mix(in srgb, rgba(255,255,255,.08) calc(var(--n) * 100%), rgba(0,0,0,.08));
+  --in: color-mix(in srgb, rgba(29,39,51,.9) calc(var(--n) * 100%), rgba(255,255,255,.93));
+  --out: color-mix(in srgb, rgba(43,82,120,.92) calc(var(--n) * 100%), rgba(225,254,198,.94));
+  --meta-in: color-mix(in srgb, rgba(255,255,255,.45) calc(var(--n) * 100%), #a0acb6);
+  --meta-out: color-mix(in srgb, rgba(255,255,255,.55) calc(var(--n) * 100%), #4fae4e);
+  --field: color-mix(in srgb, rgba(255,255,255,.07) calc(var(--n) * 100%), rgba(255,255,255,.9));
+  --sheet: color-mix(in srgb, #1c1f26 calc(var(--n) * 100%), #f2f2f7);
+  --cell: color-mix(in srgb, #262a33 calc(var(--n) * 100%), #ffffff);
+  position: relative; width: 390px; height: 844px; border-radius: 44px; overflow: hidden; color: var(--text);
+  user-select: none; -webkit-user-select: none;
+}
+.screen canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
+#wx-bg { z-index: 0; }
+#wx-fg { z-index: 2; }
+
+/* ---------- chat ---------- */
+.chat { position: absolute; inset: 0; overflow-y: auto; z-index: 1; padding: 108px 0 74px; scrollbar-width: none; }
+.chat::-webkit-scrollbar { display: none; }
+.msgs { display: flex; flex-direction: column; justify-content: flex-end; min-height: 100%; padding-top: 8px; }
+.date { align-self: center; margin: 4px 0 10px; padding: 3px 10px; border-radius: 12px; font-size: 13px; font-weight: 500;
+  color: #fff; background: rgba(0,0,0,.22); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.msg { display: flex; padding: 3px 12px; }
+.msg.out { justify-content: flex-end; }
+.bubble { position: relative; max-width: 76%; padding: 7px 11px 7px 12px; border-radius: 18px; font-size: 16px; line-height: 21px;
+  backdrop-filter: blur(10px) saturate(160%); -webkit-backdrop-filter: blur(10px) saturate(160%); box-shadow: 0 1px 1.5px rgba(0,0,0,.08); }
+.in .bubble { background: var(--in); border-bottom-left-radius: 6px; }
+.out .bubble { background: var(--out); border-bottom-right-radius: 6px; }
+.meta { float: right; margin: 6px -3px -5px 10px; font-size: 11.5px; line-height: 16px; display: inline-flex; align-items: center; gap: 3px; }
+.in .meta { color: var(--meta-in); }
+.out .meta { color: var(--meta-out); }
+.meta svg { width: 16px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- top bar ---------- */
+.top { position: absolute; left: 0; right: 0; top: 0; z-index: 3; background: var(--bar); border-bottom: .5px solid var(--bar-line);
+  backdrop-filter: blur(22px) saturate(180%); -webkit-backdrop-filter: blur(22px) saturate(180%); }
+.status { height: 47px; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 30px 6px 36px; font-weight: 600; font-size: 16px; }
+.status .sys { display: flex; gap: 6px; align-items: center; }
+.status svg { height: 12px; fill: currentColor; }
+.bar { height: 54px; display: flex; align-items: center; padding: 0 10px 0 6px; }
+.back { display: flex; align-items: center; color: var(--accent); font-size: 17px; gap: 2px; min-width: 70px; }
+.back svg { width: 13px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; margin-right: 4px; }
+.back .count { background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; border-radius: 10px; padding: 1px 7px; }
+.peer { flex: 1; text-align: center; display: flex; flex-direction: column; align-items: center; }
+.peer .name { font-weight: 600; font-size: 16.5px; line-height: 20px; }
+.pill { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; line-height: 17px; color: var(--sub); padding: 1px 7px; margin-top: 1px; border-radius: 10px; }
+.pill.on { color: var(--accent); }
+.pill .ico svg { width: 14px; height: 14px; display: block; }
+.avatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(160deg, #ff9b7b, #e0527f); color: #fff; font-weight: 600; font-size: 16px; display: grid; place-items: center; margin-left: 32px; }
+svg.wx { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- composer ---------- */
+.composer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; display: flex; align-items: flex-end; gap: 8px; padding: 8px 10px 26px;
+  background: var(--bar); border-top: .5px solid var(--bar-line); backdrop-filter: blur(22px) saturate(180%); -webkit-backdrop-filter: blur(22px) saturate(180%); }
+.composer .icon { width: 34px; height: 36px; display: grid; place-items: center; color: var(--sub); flex: none; }
+.composer .icon svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.field { flex: 1; min-height: 36px; border-radius: 18px; background: var(--field); border: .5px solid var(--bar-line); display: flex; align-items: center; padding: 0 14px; }
+.field input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 16px; }
+.field input::placeholder { color: var(--sub); }
+.send { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; color: var(--sub); }
+.send.ready { background: var(--accent); color: #fff; }
+.send svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- sheet ---------- */
+.backdrop { position: absolute; inset: 0; z-index: 4; background: rgba(0,0,0,.32); opacity: 0; pointer-events: none; }
+.backdrop.open { pointer-events: auto; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; background: var(--sheet); border-radius: 14px 14px 0 0; padding: 8px 16px 32px; transform: translateY(105%); }
+.grab { width: 36px; height: 5px; border-radius: 3px; background: var(--sub); opacity: .4; margin: 0 auto 14px; }
+.sheet-title { text-align: center; font-weight: 600; font-size: 17px; }
+.sheet-sub { text-align: center; color: var(--sub); font-size: 13.5px; line-height: 1.4; margin: 6px 12px 18px; }
+.group { background: var(--cell); border-radius: 12px; overflow: hidden; margin-bottom: 18px; }
+.row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 14px; text-align: left; position: relative; }
+.row + .row::before { content: ''; position: absolute; left: 58px; right: 0; top: 0; height: .5px; background: var(--bar-line); }
+.row-ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; flex: none; }
+.row-ico svg { width: 18px; height: 18px; }
+.row-text { flex: 1; display: flex; flex-direction: column; }
+.row-text b { font-weight: 500; font-size: 16px; }
+.row-text small { color: var(--sub); font-size: 13px; margin-top: 1px; }
+.radio { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--sub); opacity: .6; flex: none; }
+.row.sel .radio { border: 7px solid var(--accent); opacity: 1; }
+.label { font-size: 12.5px; color: var(--sub); letter-spacing: .04em; margin: 0 14px 7px; }
+.chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.chip { background: var(--cell); border-radius: 12px; padding: 10px 6px 8px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 13px; border: 1.5px solid transparent; }
+.chip svg { width: 24px; height: 24px; color: var(--accent); }
+.chip.sel { border-color: var(--accent); }
+.switch { width: 51px; height: 31px; border-radius: 16px; background: color-mix(in srgb, #3a3f4a calc(var(--n) * 100%), #e2e2e8); position: relative; flex: none; }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.2); transform: translateX(calc(var(--sw, 0) * 20px)); }
+.switch.on { background: #34c759; }
+.foot { color: var(--sub); font-size: 12.5px; line-height: 1.45; text-align: center; margin: 4px 10px 0; }
+
+/* ---------- touch indicator (demo video) ---------- */
+.touch { position: absolute; z-index: 9; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; pointer-events: none; opacity: 0;
+  border: 2.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.12), inset 0 0 0 1px rgba(0,0,0,.08), 0 2px 10px rgba(0,0,0,.18); }
+
+/* ---------- full-screen modes: video recording + phones ---------- */
+body.record .stage, body.full .stage { padding: 0; display: block; }
+body.record .intro, body.full .intro { display: none; }
+body.record .phone, body.full .phone { padding: 0; border-radius: 0; background: none; box-shadow: none; }
+body.record .screen { border-radius: 0; }
+body.full .screen { border-radius: 0; width: 100vw; height: 100vh; height: 100dvh; }
+body.record { cursor: none; }
+
+</style>
+</head>
+<body>
+<div class="stage">
+  <aside class="intro">
+    <div class="kicker">Telegram · Designers × AI</div>
+    <h1>Live Weather</h1>
+    <p>The chat wallpaper follows the real weather — yours, or the person you're talking to. Snow settles on messages, rain runs down the glass, and night brings the stars.</p>
+    <ol>
+      <li>Tap the weather under the name</li>
+      <li>Pick “Mom's weather” and wait for snow to pile up</li>
+      <li>Scroll — the snow falls off</li>
+      <li>Switch to rain and send a message</li>
+    </ol>
+    <button class="play" id="playBtn">▶ Play demo</button>
+  </aside>
+
+  <div class="phone">
+    <div class="screen" id="screen">
+      <canvas id="wx-bg"></canvas>
+      <div class="chat" id="chat"><div class="msgs" id="msgs"><div class="date">Today</div></div></div>
+      <canvas id="wx-fg"></canvas>
+
+      <header class="top">
+        <div class="status">
+          <span>9:41</span>
+          <span class="sys">
+            <svg viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+            <svg viewBox="0 0 17 12" class="wifi"><path d="M8.5 11.6 6 8.9a3.6 3.6 0 0 1 5 0z"/><path d="M3.6 6.4a6.9 6.9 0 0 1 9.8 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M1 3.6a10.6 10.6 0 0 1 15 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 27 12"><rect x=".5" y=".5" width="22" height="11" rx="3" fill="none" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="17" height="8" rx="1.6"/><rect x="24" y="4" width="1.6" height="4" rx=".8" opacity=".45"/></svg>
+          </span>
+        </div>
+        <div class="bar">
+          <button class="back"><svg viewBox="0 0 13 21"><path d="M11 2 2.5 10.5 11 19"/></svg><span class="count">12</span></button>
+          <div class="peer">
+            <div class="name">Mom</div>
+            <button class="pill" id="pill"><span class="ico" id="pillIco"></span><span id="pillText">online</span></button>
+          </div>
+          <div class="avatar">M</div>
+        </div>
+      </header>
+
+      <footer class="composer">
+        <button class="icon" aria-label="Attach"><svg viewBox="0 0 24 24"><path d="M20.5 11.5 12 20a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg></button>
+        <label class="field"><input id="input" placeholder="Message" autocomplete="off"></label>
+        <button class="send" id="send" aria-label="Send"></button>
+      </footer>
+
+      <div class="backdrop" id="backdrop"></div>
+      <div class="sheet" id="sheet">
+        <div class="grab"></div>
+        <div class="sheet-title">Live Weather</div>
+        <div class="sheet-sub">The chat background follows the weather.<br>Snow settles on messages,<br>rain runs down the glass.</div>
+        <div class="group">
+          <button class="row" data-source="off"><span class="row-ico" style="background:#8e8e93" data-icon="off"></span><span class="row-text"><b>Off</b><small>Regular wallpaper</small></span><span class="radio"></span></button>
+          <button class="row" data-source="mine"><span class="row-ico" style="background:#ff9f0a" id="icoMine"></span><span class="row-text"><b>My weather</b><small id="subMine">Tashkent</small></span><span class="radio"></span></button>
+          <button class="row" data-source="peer"><span class="row-ico" style="background:#5e5ce6" id="icoPeer"></span><span class="row-text"><b>Mom's weather</b><small id="subPeer">Almaty · shared by Mom</small></span><span class="radio"></span></button>
+        </div>
+        <div class="label">PREVIEW</div>
+        <div class="chips" id="chips"></div>
+        <div class="group">
+          <div class="row"><span class="row-ico" style="background:#1c3d7a" data-icon="moon"></span><span class="row-text"><b>Night</b><small>Follows sunset at that place</small></span><button class="switch" id="nightSw" aria-label="Night"></button></div>
+        </div>
+        <div class="foot">Uses only the city, never precise location.<br>Effects pause in Power Saving mode.</div>
+      </div>
+
+      <div class="touch" id="touch"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/*!
+ * Telegram Live Weather — WeatherLayer engine
+ * Framework-agnostic, zero dependencies, Canvas 2D.
+ * MIT License
+ *
+ * Two canvases:
+ *   background — behind messages (gradient, clouds, fog, sun rays, stars, rain, glass drops, far snow)
+ *   foreground — above messages, pointer-events: none (snow caps on bubbles, splashes, near flakes, glare)
+ *
+ * The host app supplies getBubbles() -> [{ el, x, y, w, h, r }] in layer-local CSS pixels
+ * and calls frame(timeMs) once per animation frame.
+ */
+(function (global) {
+  'use strict';
+
+  const TW = (global.TgWeather = global.TgWeather || {});
+
+  // ---------- helpers -------------------------------------------------------
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const approach = (cur, target, rate, s) => cur + (target - cur) * (1 - Math.exp(-rate * s));
+  const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+  const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+  const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+
+  // ---------- palettes: 4 gradient points, like Telegram's animated wallpapers
+  const RAW = {
+    // 'none' = the classic Telegram wallpaper, no weather effects
+    none:   { day: ['#dbddbb', '#6ba587', '#d5d88d', '#88b884'], night: ['#121d22', '#1c2b2a', '#16231f', '#22302d'] },
+    clear: { day: ['#ffe2a8', '#f9b16e', '#9fd8f2', '#63b3ea'], night: ['#0a1730', '#16295a', '#24194a', '#0d2440'] },
+    cloudy: { day: ['#d6dfe8', '#aebdcd', '#e9edf2', '#93a6bb'], night: ['#1a222d', '#27313f', '#1f2834', '#323d4d'] },
+    rain:   { day: ['#8197ab', '#5d758b', '#a5b6c5', '#4e6377'], night: ['#101a25', '#1b2938', '#14202d', '#223243'] },
+    storm:  { day: ['#4f5866', '#363f4c', '#5d6674', '#2a323e'], night: ['#090d15', '#131924', '#0d131d', '#1b222d'] },
+    snow:   { day: ['#c4d6ea', '#93afd0', '#d6e3f1', '#7f9ec4'], night: ['#15223a', '#21314f', '#1a2944', '#2b3c5b'] },
+    fog:    { day: ['#e1e4e7', '#c9ced3', '#eef0f1', '#b8bec4'], night: ['#1d2125', '#292e33', '#23272c', '#32373d'] },
+  };
+  const PALETTES = {};
+  for (const k in RAW) PALETTES[k] = { day: RAW[k].day.map(hex), night: RAW[k].night.map(hex) };
+
+  // ---------- which effects a condition turns on (weights 0..1+)
+  const EFFECTS = ['sun', 'rain', 'snow', 'fog', 'stars', 'moon', 'storm', 'clouds'];
+  function targetsFor(cond, night) {
+    const t = {}; EFFECTS.forEach((k) => (t[k] = 0));
+    switch (cond) {
+      case 'clear':  if (night) { t.stars = 1; t.moon = 1; } else t.sun = 1; break;
+      case 'cloudy': t.clouds = 1; if (night) t.stars = 0.25; else t.sun = 0.3; break;
+      case 'rain':   t.rain = 1; t.clouds = 0.45; break;
+      case 'storm':  t.rain = 1.35; t.storm = 1; t.clouds = 0.8; break;
+      case 'snow':   t.snow = 1; if (night) t.stars = 0.35; break;
+      case 'fog':    t.fog = 1; break;
+    }
+    return t;
+  }
+
+  const COL = 3;          // snow-cap column width, px
+  const CAP_MAX = 10;     // max snow height on a bubble, px
+
+  class WeatherLayer {
+    /**
+     * @param {object} o
+     * @param {HTMLCanvasElement} o.background
+     * @param {HTMLCanvasElement} o.foreground
+     * @param {() => Array<{el:Element,x:number,y:number,w:number,h:number,r:number}>} o.getBubbles
+     * @param {number} o.width  CSS px
+     * @param {number} o.height CSS px
+     * @param {number} [o.dpr]
+     * @param {number} [o.quality] particle multiplier, 0.3 (low-end) … 1
+     * @param {boolean} [o.reducedMotion] gradient only, no particles
+     */
+    constructor(o) {
+      this.bg = o.background; this.fg = o.foreground;
+      this.b = this.bg.getContext('2d'); this.f = this.fg.getContext('2d');
+      this.getBubbles = o.getBubbles || (() => []);
+      this.onEvent = o.onEvent || null; // optional hook: 'lightning', 'shooting-star' (e.g. for sound)
+      this.dpr = o.dpr || Math.min(global.devicePixelRatio || 1, 2);
+      this.quality = o.quality == null ? 1 : o.quality;
+      this.reduced = !!o.reducedMotion;
+      this.cond = 'clear'; this.night = false;
+      this.target = targetsFor('clear', false);
+      this.w = Object.assign({}, this.target);
+      this.colors = PALETTES.clear.day.map((c) => c.slice());
+      this.caps = new WeakMap();
+      this.time = 0; this.last = null;
+      this.flash = 0; this.bolt = null; this.nextBolt = 2500; this.pendingFlash = -1;
+      this.shoot = null; this.nextShoot = 3500;
+      this.splashes = []; this.chunks = []; this.drops = [];
+      this.resize(o.width, o.height);
+    }
+
+    resize(w, h) {
+      this.W = w; this.H = h;
+      for (const c of [this.bg, this.fg]) {
+        c.width = Math.round(w * this.dpr); c.height = Math.round(h * this.dpr);
+        c.style.width = w + 'px'; c.style.height = h + 'px';
+      }
+      this.seed();
+    }
+
+    seed() {
+      const { W, H } = this, q = this.quality;
+      this.stars = Array.from({ length: Math.round(110 * q) }, () => ({
+        x: rand(0, W), y: Math.pow(Math.random(), 1.4) * H * 0.75, r: rand(0.4, 1.5), ph: rand(0, 6.28), sp: rand(0.6, 2.2),
+      }));
+      this.motes = Array.from({ length: Math.round(34 * q) }, () => ({
+        x: rand(0, W), y: rand(0, H), r: rand(0.8, 2.6), vy: rand(4, 14), ph: rand(0, 6.28),
+      }));
+      this.fogs = Array.from({ length: 9 }, (_, i) => ({
+        x: rand(-0.2, 1.2) * W, y: (i / 8) * H * 1.1 - H * 0.05, r: rand(0.45, 0.8) * W, vx: rand(4, 12) * (Math.random() < 0.5 ? -1 : 1),
+      }));
+      this.clouds = Array.from({ length: 5 }, (_, i) => ({
+        x: rand(0, W), y: rand(0.02, 0.45) * H, s: rand(0.7, 1.4), vx: rand(5, 11), seed: i,
+        puffs: Array.from({ length: 6 }, () => ({ dx: rand(-70, 70), dy: rand(-18, 18), r: rand(34, 64) })),
+      }));
+      this.streaks = Array.from({ length: Math.round(300 * q) }, () => this.newStreak(true));
+      this.flakes = Array.from({ length: Math.round(230 * q) }, () => this.newFlake(true));
+    }
+
+    newStreak(anywhere) {
+      const z = Math.random();
+      return { x: rand(-0.25, 1) * this.W, y: anywhere ? rand(-this.H, this.H) : rand(-160, -20), z, len: 10 + z * 20, sp: 650 + z * 650 };
+    }
+    newFlake(anywhere) {
+      const z = Math.pow(Math.random(), 1.3);
+      return { x: rand(-0.05, 1.05) * this.W, y: anywhere ? rand(-this.H, this.H) : rand(-40, -6), z, r: 0.8 + z * 2.8, sp: 18 + z * 52, ph: rand(0, 6.28), amp: rand(8, 26) };
+    }
+
+    // ---------- public API ---------------------------------------------------
+    setWeather(cond, night, instant) {
+      if (!PALETTES[cond]) cond = 'clear';
+      this.cond = cond; this.night = !!night;
+      this.target = targetsFor(cond, this.night);
+      if (instant) {
+        Object.assign(this.w, this.target);
+        this.colors = PALETTES[cond][this.night ? 'night' : 'day'].map((c) => c.slice());
+      }
+      if (cond === 'storm') this.nextBolt = 1400;
+    }
+
+    /** Raindrops on the "glass" part around a freshly sent bubble. rect in local px. */
+    onMessageSent(r) {
+      if (this.w.rain < 0.15) return;
+      const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+      for (const d of this.drops) {
+        const nx = clamp(d.x, r.x, r.x + r.w), ny = clamp(d.y, r.y, r.y + r.h);
+        const dist = Math.hypot(d.x - nx, d.y - ny), reach = 70;
+        if (dist > reach) continue;
+        const k = 1 - dist / reach;
+        const dir = d.x < cx ? -1 : 1;
+        d.vx += dir * rand(260, 420) * k;
+        d.vy += (d.y < cy ? -1 : 1) * rand(30, 90) * k;
+        if (dist === 0 && d.r > 2.2) d.slide = true;
+      }
+    }
+
+    /** Scroll/fling sheds snow from bubble tops. */
+    onScroll(dy) {
+      const strength = clamp(Math.abs(dy) / 22, 0.12, 0.85);
+      for (const b of this.bubbles || []) {
+        const cap = this.caps.get(b.el);
+        if (cap) this.shed(cap, b, strength, Math.sign(dy));
+      }
+    }
+
+    // ---------- frame --------------------------------------------------------
+    frame(now) {
+      const dt = this.last == null ? 16 : clamp(now - this.last, 0, 50);
+      this.last = now; this.time += dt;
+      const s = dt / 1000, t = this.time / 1000;
+
+      for (const k of EFFECTS) this.w[k] = approach(this.w[k], this.target[k], 1.5, s);
+      const pal = PALETTES[this.cond][this.night ? 'night' : 'day'];
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) this.colors[i][j] = approach(this.colors[i][j], pal[i][j], 1.7, s);
+
+      this.bubbles = this.getBubbles();
+      const b = this.b, f = this.f, d = this.dpr;
+      b.setTransform(d, 0, 0, d, 0, 0); f.setTransform(d, 0, 0, d, 0, 0);
+      f.clearRect(0, 0, this.W, this.H);
+
+      this.drawGradient(b, t);
+      if (this.reduced) return;
+
+      const w = this.w;
+      if (w.clouds > 0.01) this.drawClouds(b, s, w.clouds);
+      if (w.fog > 0.01) this.drawFog(b, f, s, w.fog);
+      if (w.sun > 0.01) this.drawSun(b, f, s, t, w.sun);
+      if (w.stars > 0.01 || w.moon > 0.01) this.drawNight(b, s, t, w.stars, w.moon);
+      if (w.rain > 0.01 || this.drops.length) this.drawRain(b, f, s, w.rain);
+      this.updateCaps(f, s, w.snow);
+      if (w.snow > 0.01) this.drawSnow(b, f, s, t, w.snow);
+      this.drawChunks(f, s);
+      this.drawStorm(b, f, dt, w.storm);
+    }
+
+    // ---------- background gradient (4 moving colour points) -----------------
+    drawGradient(ctx, t) {
+      const { W, H } = this, c = this.colors;
+      ctx.fillStyle = rgba(c[0], 1); ctx.fillRect(0, 0, W, H);
+      const pts = [
+        [0.18 + 0.12 * Math.sin(t * 0.13), 0.16 + 0.1 * Math.cos(t * 0.11)],
+        [0.86 + 0.1 * Math.cos(t * 0.09), 0.32 + 0.12 * Math.sin(t * 0.12)],
+        [0.22 + 0.12 * Math.cos(t * 0.1), 0.82 + 0.08 * Math.sin(t * 0.14)],
+        [0.82 + 0.1 * Math.sin(t * 0.08), 0.88 + 0.08 * Math.cos(t * 0.1)],
+      ];
+      const R = Math.max(W, H) * 0.7;
+      for (let i = 0; i < 4; i++) {
+        const [px, py] = pts[i];
+        const g = ctx.createRadialGradient(px * W, py * H, 0, px * W, py * H, R);
+        g.addColorStop(0, rgba(c[i], 0.95)); g.addColorStop(1, rgba(c[i], 0));
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      }
+    }
+
+    // ---------- clouds ------------------------------------------------------
+    drawClouds(ctx, s, a) {
+      const col = this.night ? [150, 165, 190] : [255, 255, 255];
+      for (const cl of this.clouds) {
+        cl.x += cl.vx * s; if (cl.x - 160 > this.W) cl.x = -160;
+        for (const p of cl.puffs) {
+          const x = cl.x + p.dx * cl.s, y = cl.y + p.dy * cl.s, r = p.r * cl.s;
+          const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+          g.addColorStop(0, rgba(col, 0.42 * a)); g.addColorStop(1, rgba(col, 0));
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+        }
+      }
+    }
+
+    // ---------- fog ---------------------------------------------------------
+    drawFog(b, f, s, a) {
+      const col = this.night ? [150, 158, 168] : [255, 255, 255];
+      for (const fg of this.fogs) {
+        fg.x += fg.vx * s;
+        if (fg.x - fg.r > this.W) fg.x = -fg.r; if (fg.x + fg.r < 0) fg.x = this.W + fg.r;
+        const g = b.createRadialGradient(fg.x, fg.y, 0, fg.x, fg.y, fg.r);
+        g.addColorStop(0, rgba(col, 0.5 * a)); g.addColorStop(1, rgba(col, 0));
+        b.fillStyle = g; b.fillRect(fg.x - fg.r, fg.y - fg.r, fg.r * 2, fg.r * 2);
+      }
+      // a thin veil in front, only at the edges, so text stays readable
+      const v = f.createLinearGradient(0, 0, 0, this.H);
+      v.addColorStop(0, rgba(col, 0.22 * a)); v.addColorStop(0.18, rgba(col, 0));
+      v.addColorStop(0.8, rgba(col, 0)); v.addColorStop(1, rgba(col, 0.28 * a));
+      f.fillStyle = v; f.fillRect(0, 0, this.W, this.H);
+    }
+
+    // ---------- sun: glow, rays, floating motes, glare over bubbles ----------
+    drawSun(b, f, s, t, a) {
+      const { W, H } = this, sx = W * 0.9, sy = -H * 0.05;
+      const g = b.createRadialGradient(sx, sy, 0, sx, sy, W * 1.1);
+      g.addColorStop(0, `rgba(255,246,214,${0.75 * a})`); g.addColorStop(0.35, `rgba(255,226,170,${0.28 * a})`); g.addColorStop(1, 'rgba(255,220,160,0)');
+      b.fillStyle = g; b.fillRect(0, 0, W, H);
+
+      b.globalCompositeOperation = 'lighter';
+      const L = H * 1.25;
+      for (let i = 0; i < 9; i++) {
+        const ang = Math.PI * 0.58 + i * 0.105 + 0.035 * Math.sin(t * 0.35 + i * 1.7);
+        const spread = 0.022 + 0.014 * Math.sin(t * 0.5 + i);
+        const x1 = sx + Math.cos(ang - spread) * L, y1 = sy + Math.sin(ang - spread) * L;
+        const x2 = sx + Math.cos(ang + spread) * L, y2 = sy + Math.sin(ang + spread) * L;
+        const lg = b.createLinearGradient(sx, sy, sx + Math.cos(ang) * L, sy + Math.sin(ang) * L);
+        const al = (0.09 + 0.05 * Math.sin(t * 0.7 + i * 2.1)) * a;
+        lg.addColorStop(0, `rgba(255,250,225,${al})`); lg.addColorStop(1, 'rgba(255,250,225,0)');
+        b.fillStyle = lg; b.beginPath(); b.moveTo(sx, sy); b.lineTo(x1, y1); b.lineTo(x2, y2); b.closePath(); b.fill();
+      }
+      for (const m of this.motes) {
+        m.y -= m.vy * s; m.x += Math.sin(t * 0.6 + m.ph) * 6 * s;
+        if (m.y < -5) { m.y = H + 5; m.x = rand(0, W); }
+        const al = a * 0.55 * (0.5 + 0.5 * Math.sin(t * 1.3 + m.ph));
+        const mg = b.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 3);
+        mg.addColorStop(0, `rgba(255,248,220,${al})`); mg.addColorStop(1, 'rgba(255,248,220,0)');
+        b.fillStyle = mg; b.fillRect(m.x - m.r * 3, m.y - m.r * 3, m.r * 6, m.r * 6);
+      }
+      b.globalCompositeOperation = 'source-over';
+
+      // a slow sheen of sunlight sweeps across the bubbles every 7s
+      const p = (this.time % 7000) / 1700;
+      if (p < 1) {
+        const bx = lerp(-W * 0.4, W * 1.4, easeInOut(p));
+        for (const bb of this.bubbles) {
+          f.save(); f.beginPath(); f.roundRect(bb.x, bb.y, bb.w, bb.h, bb.r); f.clip();
+          f.translate(bx, bb.y + bb.h / 2); f.rotate(-0.42);
+          const sg = f.createLinearGradient(-55, 0, 55, 0);
+          sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, `rgba(255,255,255,${0.32 * a})`); sg.addColorStop(1, 'rgba(255,255,255,0)');
+          f.fillStyle = sg; f.fillRect(-55, -400, 110, 800);
+          f.restore();
+        }
+      }
+    }
+
+    // ---------- night: stars, moon, shooting star ----------------------------
+    drawNight(ctx, s, t, sa, ma) {
+      for (const st of this.stars) {
+        const al = sa * (0.3 + 0.7 * (0.5 + 0.5 * Math.sin(t * st.sp + st.ph)));
+        ctx.fillStyle = `rgba(235,240,255,${al})`;
+        ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, 6.283); ctx.fill();
+      }
+      if (ma > 0.01) {
+        const mx = this.W * 0.76, my = this.H * 0.2, r = 20;
+        const g = ctx.createRadialGradient(mx, my, r * 0.6, mx, my, r * 7);
+        g.addColorStop(0, `rgba(220,230,255,${0.35 * ma})`); g.addColorStop(1, 'rgba(220,230,255,0)');
+        ctx.fillStyle = g; ctx.fillRect(mx - r * 7, my - r * 7, r * 14, r * 14);
+        const mg = ctx.createRadialGradient(mx - 6, my - 6, 2, mx, my, r);
+        mg.addColorStop(0, `rgba(255,253,240,${ma})`); mg.addColorStop(1, `rgba(214,222,240,${ma})`);
+        ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(mx, my, r, 0, 6.283); ctx.fill();
+        ctx.fillStyle = `rgba(160,172,200,${0.35 * ma})`;
+        for (const [cx, cy, cr] of [[-6, 4, 4], [5, -5, 3], [7, 7, 2.2], [-2, -9, 1.8]]) { ctx.beginPath(); ctx.arc(mx + cx, my + cy, cr, 0, 6.283); ctx.fill(); }
+      }
+      // shooting star
+      this.nextShoot -= s * 1000;
+      if (sa > 0.6 && this.nextShoot <= 0 && !this.shoot) {
+        this.shoot = { x: rand(0.2, 0.9) * this.W, y: rand(0.03, 0.25) * this.H, vx: -rand(380, 520), vy: rand(150, 220), life: 1 };
+        this.nextShoot = rand(5000, 8000);
+        this.onEvent && this.onEvent('shooting-star');
+      }
+      if (this.shoot) {
+        const sh = this.shoot; sh.x += sh.vx * s; sh.y += sh.vy * s; sh.life -= s * 1.3;
+        if (sh.life <= 0) this.shoot = null;
+        else {
+          const tx = sh.x - sh.vx * 0.16, ty = sh.y - sh.vy * 0.16;
+          const lg = ctx.createLinearGradient(sh.x, sh.y, tx, ty);
+          lg.addColorStop(0, `rgba(255,255,255,${sh.life * sa})`); lg.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.strokeStyle = lg; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(sh.x, sh.y); ctx.lineTo(tx, ty); ctx.stroke();
+        }
+      }
+    }
+
+    // ---------- rain: streaks, splashes on bubbles, drops on glass -----------
+    drawRain(b, f, s, a) {
+      const { W, H } = this, wind = 0.2 + (this.w.storm * 0.12);
+      const n = Math.round(this.streaks.length * clamp(a / 1.35, 0, 1));
+      const col = this.night ? [175, 195, 225] : [255, 255, 255];
+      b.lineCap = 'round';
+      for (let band = 0; band < 3; band++) {
+        b.beginPath();
+        b.strokeStyle = rgba(col, (0.16 + band * 0.12) * Math.min(a, 1));
+        b.lineWidth = 0.7 + band * 0.55;
+        for (let i = 0; i < n; i++) {
+          const r = this.streaks[i];
+          if (((r.z * 3) | 0) !== band) continue;
+          const py = r.y;
+          r.y += r.sp * s; r.x += r.sp * wind * s;
+          if (r.z > 0.5) {
+            for (const bb of this.bubbles) {
+              if (py < bb.y && r.y >= bb.y && r.x > bb.x + 10 && r.x < bb.x + bb.w - 10) {
+                this.splash(r.x, bb.y); Object.assign(r, this.newStreak(false)); break;
+              }
+            }
+          }
+          if (r.y - r.len > H || r.x > W + 40) Object.assign(r, this.newStreak(false));
+          b.moveTo(r.x, r.y); b.lineTo(r.x - r.len * wind, r.y - r.len);
+        }
+        b.stroke();
+      }
+
+      // splashes (foreground, sitting on bubble edges)
+      f.fillStyle = rgba(col, 0.8);
+      for (let i = this.splashes.length - 1; i >= 0; i--) {
+        const p = this.splashes[i];
+        p.vy += 900 * s; p.x += p.vx * s; p.y += p.vy * s; p.life -= s * 2.6;
+        if (p.life <= 0) { this.splashes.splice(i, 1); continue; }
+        f.globalAlpha = p.life; f.beginPath(); f.arc(p.x, p.y, p.r, 0, 6.283); f.fill();
+      }
+      f.globalAlpha = 1;
+
+      this.updateDrops(b, s, a);
+    }
+
+    splash(x, y) {
+      if (this.splashes.length > 160) return;
+      const n = 2 + ((Math.random() * 3) | 0);
+      for (let i = 0; i < n; i++) this.splashes.push({ x, y: y - 1, vx: rand(-70, 70), vy: rand(-170, -70), r: rand(0.6, 1.3), life: 1 });
+    }
+
+    updateDrops(ctx, s, a) {
+      const { W, H } = this, drops = this.drops;
+      // spawn
+      const max = Math.round(140 * this.quality * clamp(a, 0, 1));
+      if (drops.length < max && Math.random() < s * 26 * a) {
+        drops.push({ x: rand(0, W), y: rand(0, H * 0.95), r: rand(2, 3.8), grow: rand(0.35, 1), vx: 0, vy: 0, slide: false, life: 1, trail: false });
+      }
+      for (let i = drops.length - 1; i >= 0; i--) {
+        const d = drops[i];
+        if (a < 0.2) d.life -= s * 0.8;                       // evaporate when rain stops
+        if (d.trail) d.life -= s * 0.35;
+        if (!d.slide && !d.trail) d.r = Math.min(d.r + d.grow * s * a, 6.5);
+        if (!d.slide && !d.trail && d.r > 5.2 && Math.random() < s * 0.6) d.slide = true;
+        if (d.slide) {
+          d.vy = Math.min(d.vy + 260 * s, 150);
+          d.vx += Math.sin(this.time / 140 + i) * 20 * s;
+          if (Math.random() < s * 9) drops.push({ x: d.x, y: d.y - d.r, r: rand(0.6, 1.2), grow: 0, vx: 0, vy: 0, slide: false, life: 1, trail: true });
+          // absorb drops in the path
+          for (let j = drops.length - 1; j >= 0; j--) {
+            const o = drops[j];
+            if (o === d || o.slide || o.trail) continue;
+            if (Math.abs(o.x - d.x) < d.r + o.r && Math.abs(o.y - d.y) < d.r + o.r) {
+              d.r = Math.min(Math.sqrt(d.r * d.r + o.r * o.r * 0.5), 6); drops.splice(j, 1); if (j < i) i--;
+            }
+          }
+        } else {
+          d.vy = approach(d.vy, 0, 5, s);
+        }
+        d.vx = approach(d.vx, 0, 4.5, s);
+        d.x += d.vx * s; d.y += d.vy * s;
+        if (d.y - d.r > H || d.life <= 0 || d.x < -10 || d.x > W + 10) { drops.splice(i, 1); continue; }
+        this.drawDrop(ctx, d.x, d.y, d.r, d.life * clamp(a * 1.2, 0.25, 1));
+      }
+    }
+
+    drawDrop(ctx, x, y, r, al) {
+      const ry = r * 1.08;
+      const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, ry);
+      g.addColorStop(0, `rgba(255,255,255,${0.55 * al})`);
+      g.addColorStop(0.55, `rgba(255,255,255,${0.1 * al})`);
+      g.addColorStop(1, `rgba(10,25,45,${0.45 * al})`);
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, r, ry, 0, 0, 6.283); ctx.fill();
+      if (r > 1.6) {
+        ctx.strokeStyle = `rgba(255,255,255,${0.45 * al})`; ctx.lineWidth = r * 0.22;
+        ctx.beginPath(); ctx.arc(x, y + r * 0.05, r * 0.68, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
+        ctx.fillStyle = `rgba(255,255,255,${0.85 * al})`;
+        ctx.beginPath(); ctx.arc(x - r * 0.35, y - r * 0.42, r * 0.2, 0, 6.283); ctx.fill();
+      }
+    }
+
+    // ---------- snow: flakes + caps that pile on bubbles ---------------------
+    capFor(bb) {
+      let cap = this.caps.get(bb.el);
+      const n = Math.max(2, Math.ceil(bb.w / COL) + 1);
+      if (!cap || cap.n !== n) {
+        const next = { n, cols: new Float32Array(n), noise: Float32Array.from({ length: n }, () => rand(0.6, 1.3)) };
+        if (cap) for (let j = 0; j < n; j++) {         // keep the snow: resample the old height map to the new width
+          const u = (j / (n - 1)) * (cap.n - 1), i0 = Math.floor(u), i1 = Math.min(cap.n - 1, i0 + 1), f = u - i0;
+          next.cols[j] = cap.cols[i0] * (1 - f) + cap.cols[i1] * f;
+          next.noise[j] = cap.noise[Math.min(cap.n - 1, Math.round(u))];
+        }
+        cap = next; this.caps.set(bb.el, cap);
+      }
+      return cap;
+    }
+    envelope(lx, w, r) { return smooth(r * 0.15, r * 1.05, lx) * smooth(r * 0.15, r * 1.05, w - lx); }
+    baseY(bb, lx) {
+      const r = bb.r, w = bb.w;
+      if (lx < r) { const dx = r - lx; return bb.y + r - Math.sqrt(Math.max(0, r * r - dx * dx)); }
+      if (lx > w - r) { const dx = lx - (w - r); return bb.y + r - Math.sqrt(Math.max(0, r * r - dx * dx)); }
+      return bb.y;
+    }
+    addSnow(bb, x, amount) {
+      const cap = this.capFor(bb), i = Math.round((x - bb.x) / COL);
+      for (let j = i - 3; j <= i + 3; j++) {
+        if (j < 0 || j >= cap.n) continue;
+        const lim = CAP_MAX * this.envelope(j * COL, bb.w, bb.r);
+        cap.cols[j] = Math.min(lim, cap.cols[j] + amount * Math.exp(-((j - i) * (j - i)) / 4));
+      }
+    }
+    shed(cap, bb, strength, dir) {
+      for (let j = 0; j < cap.n; j += 2) {
+        const amt = cap.cols[j] * strength;
+        if (amt > 0.5 && this.chunks.length < 600) {
+          const lx = j * COL;
+          this.chunks.push({ x: bb.x + lx, y: this.baseY(bb, lx) - cap.cols[j] * 0.5, vx: rand(-45, 45), vy: rand(-90, 10) - dir * 40, r: clamp(amt * 0.45, 0.8, 2.6), life: 1 });
+        }
+        cap.cols[j] -= amt; if (j + 1 < cap.n) cap.cols[j + 1] -= cap.cols[j + 1] * strength;
+      }
+    }
+
+    updateCaps(f, s, a) {
+      const melt = a < 0.35 ? (this.w.rain > 0.2 ? 1.6 : 0.5) : 0;
+      for (const bb of this.bubbles) {
+        const cap = (this.caps.has(bb.el) || a > 0.05) ? this.capFor(bb) : null;
+        if (!cap) continue;
+        const c = cap.cols; let max = 0;
+        for (let j = 0; j < cap.n; j++) {
+          if (a > 0.05) {
+            const lim = CAP_MAX * this.envelope(j * COL, bb.w, bb.r);
+            c[j] = Math.min(lim, c[j] + s * 1.1 * a * cap.noise[j]);
+          }
+          if (melt) c[j] *= Math.exp(-melt * s);
+        }
+        for (let j = 1; j < cap.n - 1; j++) c[j] = c[j] * 0.94 + (c[j - 1] + c[j + 1]) * 0.03;
+        for (let j = 0; j < cap.n; j++) if (c[j] > max) max = c[j];
+        if (max < 0.35 || bb.y < -20 || bb.y > this.H + 20) continue;
+        this.drawCap(f, bb, cap);
+      }
+    }
+
+    drawCap(f, bb, cap) {
+      const c = cap.cols;
+      f.save();
+      f.shadowColor = this.night ? 'rgba(0,0,0,0.35)' : 'rgba(30,60,100,0.22)';
+      f.shadowBlur = 5; f.shadowOffsetY = 1.5;
+      const g = f.createLinearGradient(0, bb.y - CAP_MAX, 0, bb.y + 4);
+      g.addColorStop(0, this.night ? '#f2f6ff' : '#ffffff'); g.addColorStop(1, this.night ? '#c7d3ea' : '#dde8f5');
+      f.fillStyle = g;
+      f.beginPath();
+      for (let j = 0; j < cap.n; j++) {
+        const lx = Math.min(j * COL, bb.w), px = bb.x + lx, py = this.baseY(bb, lx) - c[j];
+        if (j === 0) f.moveTo(px, py);
+        else { const plx = Math.min((j - 1) * COL, bb.w); const qx = bb.x + (plx + lx) / 2; const qy = (this.baseY(bb, plx) - c[j - 1] + py) / 2; f.quadraticCurveTo(bb.x + plx, this.baseY(bb, plx) - c[j - 1], qx, qy); }
+      }
+      for (let j = cap.n - 1; j >= 0; j--) { const lx = Math.min(j * COL, bb.w); f.lineTo(bb.x + lx, this.baseY(bb, lx) + 0.5); }
+      f.closePath(); f.fill();
+      f.shadowColor = 'transparent';
+      // a fine edge on the top surface only, fading where the cap is thin
+      f.lineWidth = 0.7; f.lineJoin = 'round';
+      for (let j = 1; j < cap.n; j++) {
+        const h = Math.min(c[j], c[j - 1]); if (h < 1.2) continue;
+        const l0 = Math.min((j - 1) * COL, bb.w), l1 = Math.min(j * COL, bb.w);
+        f.strokeStyle = (this.night ? 'rgba(170,190,230,' : 'rgba(120,150,195,') + Math.min(0.4, (h - 1.2) * 0.2) + ')';
+        f.beginPath(); f.moveTo(bb.x + l0, this.baseY(bb, l0) - c[j - 1]); f.lineTo(bb.x + l1, this.baseY(bb, l1) - c[j]); f.stroke();
+      }
+      f.restore();
+    }
+
+    drawSnow(b, f, s, t, a) {
+      const n = Math.round(this.flakes.length * clamp(a, 0, 1));
+      const wind = 10 * Math.sin(t * 0.25);
+      for (let i = 0; i < n; i++) {
+        const k = this.flakes[i];
+        const py = k.y;
+        k.y += k.sp * s; k.x += (Math.sin(t * 0.9 + k.ph) * k.amp * 0.6 + wind) * s;
+        if (k.z > 0.3 && k.z < 0.8) {
+          for (const bb of this.bubbles) {
+            if (py < bb.y && k.y >= bb.y - 1 && k.x > bb.x + 4 && k.x < bb.x + bb.w - 4) {
+              this.addSnow(bb, k.x, 0.55 + k.r * 0.25); Object.assign(k, this.newFlake(false)); break;
+            }
+          }
+        }
+        if (k.y > this.H + 10) Object.assign(k, this.newFlake(false));
+        const near = k.z > 0.82, ctx = near ? f : b;
+        const al = a * (near ? 0.7 : 0.45 + 0.5 * k.z);
+        if (near) {
+          const g = ctx.createRadialGradient(k.x, k.y, 0, k.x, k.y, k.r * 1.6);
+          g.addColorStop(0, `rgba(255,255,255,${al})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(k.x, k.y, k.r * 1.6, 0, 6.283); ctx.fill();
+        } else {
+          ctx.fillStyle = `rgba(255,255,255,${al})`;
+          ctx.beginPath(); ctx.arc(k.x, k.y, k.r, 0, 6.283); ctx.fill();
+        }
+      }
+    }
+
+    drawChunks(f, s) {
+      if (!this.chunks.length) return;
+      f.fillStyle = this.night ? '#e9effc' : '#ffffff';
+      for (let i = this.chunks.length - 1; i >= 0; i--) {
+        const p = this.chunks[i];
+        p.vy += 760 * s; p.vx *= 0.99; p.x += p.vx * s; p.y += p.vy * s;
+        if (p.y > this.H + 10) { this.chunks.splice(i, 1); continue; }
+        f.beginPath(); f.arc(p.x, p.y, p.r, 0, 6.283); f.fill();
+      }
+    }
+
+    // ---------- storm: lightning ---------------------------------------------
+    drawStorm(b, f, dt, a) {
+      if (a > 0.5) {
+        this.nextBolt -= dt;
+        if (this.nextBolt <= 0) {
+          this.flash = 1; this.pendingFlash = 130; this.bolt = this.makeBolt(); this.nextBolt = rand(3800, 6500);
+          this.onEvent && this.onEvent('lightning');
+        }
+      }
+      if (this.pendingFlash > 0) { this.pendingFlash -= dt; if (this.pendingFlash <= 0) this.flash = Math.max(this.flash, 0.75); }
+      if (this.flash <= 0.01) return;
+      if (this.bolt && this.flash > 0.3) {
+        b.save(); b.strokeStyle = `rgba(240,245,255,${this.flash})`; b.lineWidth = 2.2;
+        b.shadowColor = 'rgba(190,210,255,0.9)'; b.shadowBlur = 14; b.lineJoin = 'round';
+        b.beginPath(); this.bolt.forEach(([x, y], i) => (i ? b.lineTo(x, y) : b.moveTo(x, y))); b.stroke(); b.restore();
+      }
+      b.fillStyle = `rgba(225,232,255,${0.5 * this.flash})`; b.fillRect(0, 0, this.W, this.H);
+      f.fillStyle = `rgba(225,232,255,${0.1 * this.flash})`; f.fillRect(0, 0, this.W, this.H);
+      this.flash = Math.max(0, this.flash - dt / 260);
+    }
+    makeBolt() {
+      let x = rand(0.25, 0.8) * this.W, y = -10; const pts = [[x, y]];
+      while (y < this.H * 0.55) { y += rand(18, 42); x += rand(-26, 26); pts.push([x, y]); }
+      return pts;
+    }
+  }
+
+  TW.WeatherLayer = WeatherLayer;
+  TW.PALETTES = PALETTES;
+  TW.targetsFor = targetsFor;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/*!
+ * Telegram Live Weather — weather provider
+ * Demo source: Open-Meteo (free, no API key). In the real app this would be the
+ * same backend that already powers the weather widget in Stories.
+ * MIT License
+ */
+(function (global) {
+  'use strict';
+  const TW = (global.TgWeather = global.TgWeather || {});
+
+  /** WMO weather interpretation codes -> one of 6 visual conditions. */
+  function mapWmo(code) {
+    if (code === 0 || code === 1) return 'clear';
+    if (code === 2 || code === 3) return 'cloudy';
+    if (code === 45 || code === 48) return 'fog';
+    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
+    if (code >= 95) return 'storm';
+    return 'cloudy';
+  }
+
+  const TTL = 30 * 60 * 1000; // refresh at most every 30 minutes
+  const cache = new Map();
+
+  /**
+   * @returns {Promise<{condition:string,isNight:boolean,temp:number,code:number}>}
+   * Only coarse coordinates are needed (city level) — never precise location.
+   */
+  async function fetchCurrent(lat, lon, { signal } = {}) {
+    const key = `${lat.toFixed(1)},${lon.toFixed(1)}`;
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.at < TTL) return hit.value;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(2)}&longitude=${lon.toFixed(2)}` +
+      '&current=temperature_2m,weather_code,is_day&timezone=auto';
+    const res = await fetch(url, { signal });
+    if (!res.ok) throw new Error('weather ' + res.status);
+    const c = (await res.json()).current;
+    const value = { condition: mapWmo(c.weather_code), isNight: c.is_day === 0, temp: Math.round(c.temperature_2m), code: c.weather_code };
+    cache.set(key, { at: Date.now(), value });
+    return value;
+  }
+
+  TW.provider = { fetchCurrent, mapWmo };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/*!
+ * Telegram Live Weather — demo app (chat UI, settings sheet, scripted demo)
+ * Every animation runs on one clock, so the demo can be rendered frame-by-frame
+ * for a perfectly smooth video (?record) or live in the browser.
+ * MIT License
+ */
+(function () {
+  'use strict';
+  const TW = window.TgWeather;
+  const Q = new URLSearchParams(location.search);
+  const RECORD = Q.has('record');
+  if (RECORD) { // deterministic randomness, so the video and the sound timeline always match
+    let seed = 20261107;
+    Math.random = () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let x = Math.imul(seed ^ (seed >>> 15), 1 | seed); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+  }
+  const events = (window.__events = []); // timeline for sound design (record mode)
+  const log = (type, data) => events.push(Object.assign({ t: Math.round(clock.now), type }, data));
+  const $ = (s) => document.querySelector(s);
+  const screen = $('#screen'), chat = $('#chat'), msgs = $('#msgs');
+  const bgC = $('#wx-bg'), fgC = $('#wx-fg'), sheet = $('#sheet'), backdrop = $('#backdrop');
+  const input = $('#input'), sendBtn = $('#send'), pill = $('#pill'), touch = $('#touch');
+
+  const setMode = () => document.body.classList.toggle('full', !RECORD && innerWidth < 520);
+  document.body.classList.toggle('record', RECORD); setMode();
+
+  // ---------- one clock for everything --------------------------------------
+  const clock = { now: 0 };
+  const tweens = [], timers = [];
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+  const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const easeBack = (t) => { const c1 = 1.25, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+  function tween(dur, fn, o = {}) { tweens.push({ start: clock.now + (o.delay || 0), dur, fn, ease: o.ease || easeOut, done: o.done }); }
+  function after(ms, fn) { timers.push({ at: clock.now + ms, fn }); }
+  function step() {
+    for (let i = 0; i < timers.length; i++) if (timers[i].at <= clock.now) { const t = timers.splice(i--, 1)[0]; t.fn(); }
+    for (let i = tweens.length - 1; i >= 0; i--) {
+      const tw = tweens[i]; if (clock.now < tw.start) continue;
+      const p = Math.min(1, (clock.now - tw.start) / tw.dur); tw.fn(tw.ease(p), p);
+      if (p >= 1) { tweens.splice(i, 1); tw.done && tw.done(); }
+    }
+  }
+
+  // ---------- icons ----------------------------------------------------------
+  const C = 'M7 15h10a3.6 3.6 0 0 0 .5-7.2A5.5 5.5 0 0 0 6.6 8.6 3.2 3.2 0 0 0 7 15z';
+  const P = {
+    clear: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.1M12 19.3v2.1M2.6 12h2.1M19.3 12h2.1M5.4 5.4l1.5 1.5M17.1 17.1l1.5 1.5M5.4 18.6l1.5-1.5M17.1 6.9l1.5-1.5"/>',
+    moon: '<path d="M19.5 14.6A7.8 7.8 0 1 1 9.4 4.5a6.2 6.2 0 0 0 10.1 10.1z"/>',
+    cloudy: '<path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 11 3.5 3.5 0 0 0 7 18z"/>',
+    rain: `<path d="${C}"/><path d="M8.5 18.2 7.6 20.6M12.5 18.2l-.9 2.4M16.5 18.2l-.9 2.4"/>`,
+    storm: `<path d="${C}"/><path d="m12.6 15.5-2.1 3.2h3l-2 3"/>`,
+    snow: `<path d="${C}"/><path d="M8.5 19h.01M12 18.3h.01M15.5 19h.01M10.2 21.4h.01M13.8 21.4h.01"/>`,
+    fog: '<path d="M4 9h16M6 13h12M4 17h16"/>',
+    off: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m4 15 4.5-4.5 4 4 2.5-2.5L20 17"/>',
+  };
+  const icon = (k) => `<svg class="wx" viewBox="0 0 24 24">${P[k]}</svg>`;
+  document.querySelectorAll('[data-icon]').forEach((el) => (el.innerHTML = icon(el.dataset.icon)));
+  const CHECKS = '<svg viewBox="0 0 16 11"><path d="M1 6l3 3 6-7M6.5 9l1 .8L14 2"/></svg>';
+  const SEND = '<svg viewBox="0 0 24 24"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>';
+  const MIC = '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>';
+
+  // ---------- data -----------------------------------------------------------
+  const LABEL = { clear: 'Clear', cloudy: 'Cloudy', rain: 'Rain', storm: 'Storm', snow: 'Snow', fog: 'Fog' };
+  const TEMP = { clear: 14, cloudy: 9, rain: 7, storm: 12, snow: -3, fog: 3 };
+  const PLACES = {
+    mine: { city: 'Tashkent', lat: 41.31, lon: 69.28, cond: 'clear', night: false, temp: 14 },
+    peer: { city: 'Almaty', lat: 43.24, lon: 76.89, cond: 'snow', night: false, temp: -3 },
+  };
+  const state = { source: 'mine', preview: null, night: null };
+  const fmtT = (t) => (t > 0 ? '+' : t < 0 ? '−' : '') + Math.abs(t) + '°';
+
+  // ---------- weather engine -------------------------------------------------
+  let W = screen.clientWidth, H = screen.clientHeight;
+  function getBubbles() {
+    const cr = bgC.getBoundingClientRect(), sc = cr.width / W || 1, out = [];
+    for (const el of msgs.querySelectorAll('.bubble')) {
+      const r = el.getBoundingClientRect(), y = (r.top - cr.top) / sc, h = r.height / sc;
+      if (y > H + 40 || y + h < -40) continue;
+      out.push({ el, x: (r.left - cr.left) / sc, y, w: r.width / sc, h, r: 18 });
+    }
+    return out;
+  }
+  const engine = new TW.WeatherLayer({
+    background: bgC, foreground: fgC, getBubbles, width: W, height: H,
+    dpr: RECORD ? +(Q.get('dpr') || 2) : Math.min(devicePixelRatio || 1, 2),
+    onEvent: (type) => log(type),
+    quality: RECORD ? 1 : ((navigator.hardwareConcurrency || 8) <= 4 ? 0.6 : 1),
+    reducedMotion: !RECORD && matchMedia('(prefers-reduced-motion: reduce)').matches,
+  });
+  addEventListener('resize', () => {
+    setMode();
+    const w = screen.clientWidth, h = screen.clientHeight;
+    if (w !== W || h !== H) { W = w; H = h; engine.resize(W, H); }
+  });
+
+  // ---------- theme (day/night) ---------------------------------------------
+  let themeN = 0;
+  function setTheme(night, instant) {
+    const from = themeN, to = night ? 1 : 0;
+    if (instant) { themeN = to; screen.style.setProperty('--n', to); return; }
+    if (from === to) return;
+    tween(700, (e) => { themeN = from + (to - from) * e; screen.style.setProperty('--n', themeN.toFixed(3)); }, { ease: easeInOut });
+  }
+
+  function effective() {
+    if (state.source === 'off') return { cond: 'none', night: !!state.night };
+    const p = PLACES[state.source];
+    return { cond: state.preview || p.cond, night: state.night == null ? p.night : state.night, place: p };
+  }
+
+  function apply(instant) {
+    const e = effective();
+    engine.setWeather(e.cond, e.night, instant);
+    log('weather', { cond: e.cond, night: e.night });
+    setTheme(e.night, instant);
+    // header
+    if (e.cond === 'none') { pill.classList.remove('on'); $('#pillIco').innerHTML = ''; $('#pillText').textContent = 'online'; }
+    else {
+      const temp = state.preview ? TEMP[e.cond] : e.place.temp;
+      pill.classList.add('on');
+      $('#pillIco').innerHTML = icon(e.cond === 'clear' && e.night ? 'moon' : e.cond);
+      $('#pillText').textContent = `${e.place.city} · ${fmtT(temp)}`;
+    }
+    // sheet state
+    document.querySelectorAll('[data-source]').forEach((r) => r.classList.toggle('sel', r.dataset.source === state.source));
+    document.querySelectorAll('[data-cond]').forEach((c) => c.classList.toggle('sel', c.dataset.cond === (state.source === 'off' ? '' : e.cond)));
+    const sw = $('#nightSw'); sw.classList.toggle('on', e.night);
+    tween(220, (v) => sw.style.setProperty('--sw', e.night ? v : 1 - v));
+    for (const k of ['mine', 'peer']) {
+      const p = PLACES[k];
+      $(k === 'mine' ? '#icoMine' : '#icoPeer').innerHTML = icon(p.cond === 'clear' && p.night ? 'moon' : p.cond);
+      $(k === 'mine' ? '#subMine' : '#subPeer').textContent = `${p.city} · ${LABEL[p.cond]}, ${fmtT(p.temp)}${k === 'peer' ? ' · shared by Mom' : ''}`;
+    }
+  }
+  const setSource = (s) => { state.source = s; state.preview = null; apply(); };
+  const setPreview = (c) => { if (state.source === 'off') state.source = 'mine'; state.preview = c; apply(); };
+  const toggleNight = () => { state.night = !effective().night; apply(); };
+
+  // chips
+  $('#chips').innerHTML = Object.keys(LABEL).map((k) => `<button class="chip" data-cond="${k}">${icon(k)}${LABEL[k]}</button>`).join('');
+
+  // ---------- messages -------------------------------------------------------
+  let minute = 41;
+  const time = () => `9:${String(minute).padStart(2, '0')}`;
+  let lastTop = 0, ignoreScroll = false;
+  function setScroll(v) {
+    v = Math.max(0, Math.min(v, chat.scrollHeight - chat.clientHeight));
+    if (Math.round(v) !== Math.round(chat.scrollTop)) ignoreScroll = true;
+    chat.scrollTop = v; lastTop = chat.scrollTop;
+  }
+  chat.addEventListener('scroll', () => {
+    const dy = chat.scrollTop - lastTop; lastTop = chat.scrollTop;
+    if (ignoreScroll || RECORD) { ignoreScroll = false; return; }
+    engine.onScroll(dy);
+  }, { passive: true });
+
+  function addMessage(text, out, animate = true) {
+    const m = document.createElement('div');
+    m.className = 'msg ' + (out ? 'out' : 'in');
+    m.innerHTML = `<div class="bubble"><span class="txt"></span><span class="meta">${time()}${out ? CHECKS : ''}</span></div>`;
+    m.querySelector('.txt').textContent = text;
+    msgs.appendChild(m);
+    if (!animate) return m;
+    log(out ? 'send' : 'receive');
+    const h = m.offsetHeight, bub = m.firstChild;
+    setScroll(chat.scrollHeight);
+    bub.style.transformOrigin = out ? '100% 100%' : '0% 100%';
+    bub.style.opacity = 0;
+    tween(360, (e) => (msgs.style.transform = `translateY(${((1 - e) * h).toFixed(2)}px)`));
+    tween(440, (e) => { bub.style.transform = `scale(${(0.55 + 0.45 * e).toFixed(4)})`; bub.style.opacity = Math.min(1, e * 1.7); }, {
+      ease: easeBack, done: () => { bub.style.transform = ''; },
+    });
+    after(200, () => { const b = getBubbles().find((x) => x.el === bub); if (b) engine.onMessageSent(b); });
+    return m;
+  }
+
+  [
+    ['Good morning, sweetheart', 0], ['Morning! How is Almaty?', 1], ['Cold, but sunny so far', 0],
+    ['Here it is +14 and the trees are still green', 1], ['Lucky you. Did you have breakfast?', 0], ['Yes, mom', 1],
+    ['Did you call grandma?', 0], ['Calling her tonight', 1], ['Good. Dress warmly, the evenings are cold now', 0],
+    ['I will', 1], ['When are you coming to visit?', 0], ['Maybe in December', 1],
+  ].forEach(([t, o]) => addMessage(t, !!o, false));
+
+  function send() {
+    const v = input.value.trim(); if (!v) return;
+    minute = Math.min(59, minute + 1);
+    addMessage(v, true); input.value = ''; updateSend();
+  }
+  function updateSend() { const r = !!input.value.trim(); sendBtn.classList.toggle('ready', r); sendBtn.innerHTML = r ? SEND : MIC; }
+  input.addEventListener('input', updateSend);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+  sendBtn.addEventListener('click', send);
+  updateSend();
+
+  // ---------- sheet ----------------------------------------------------------
+  let sheetOpen = false;
+  function openSheet() {
+    if (sheetOpen) return; sheetOpen = true; backdrop.classList.add('open'); log('sheet-open');
+    tween(420, (e) => { sheet.style.transform = `translateY(${(1 - e) * 105}%)`; backdrop.style.opacity = e; }, { ease: easeOut });
+  }
+  function closeSheet() {
+    if (!sheetOpen) return; sheetOpen = false; backdrop.classList.remove('open'); log('sheet-close');
+    tween(320, (e) => { sheet.style.transform = `translateY(${e * 105}%)`; backdrop.style.opacity = 1 - e; }, { ease: easeInOut });
+  }
+  pill.addEventListener('click', openSheet);
+  backdrop.addEventListener('click', closeSheet);
+  document.querySelectorAll('[data-source]').forEach((r) => r.addEventListener('click', () => setSource(r.dataset.source)));
+  $('#chips').addEventListener('click', (e) => { const c = e.target.closest('[data-cond]'); if (c) setPreview(c.dataset.cond); });
+  $('#nightSw').addEventListener('click', toggleNight);
+
+  // ---------- scripted demo (used for the video and the ▶ button) ----------
+  const local = (el) => {
+    const sr = screen.getBoundingClientRect(), r = el.getBoundingClientRect(), sc = sr.width / W || 1;
+    return [(r.left + r.width / 2 - sr.left) / sc, (r.top + r.height / 2 - sr.top) / sc];
+  };
+  function showTouch(x, y) { touch.style.left = x + 'px'; touch.style.top = y + 'px'; tween(140, (e) => { touch.style.opacity = e; touch.style.transform = `scale(${0.6 + 0.4 * e})`; }); }
+  function hideTouch() { tween(260, (e) => { touch.style.opacity = 1 - e; touch.style.transform = `scale(${1 + 0.25 * e})`; }); }
+  function tap(el, fn) { const [x, y] = local(el); showTouch(x, y); log('tap'); after(170, () => { fn && fn(); hideTouch(); }); }
+  function typeAndSend(text, dur) {
+    tap(input);
+    tween(dur, (e, p) => { const v = text.slice(0, Math.round(p * text.length)); if (v.length > input.value.length) log('key'); input.value = v; updateSend(); }, { ease: (t) => t, delay: 250 });
+    after(dur + 550, () => tap(sendBtn, send));
+  }
+  function scrollShake() {
+    const start = chat.scrollTop, dist = 170;
+    let prev = start;
+    const [x, y] = [W * 0.58, H * 0.42];
+    showTouch(x, y); log('scroll');
+    const move = (to) => (e) => {
+      const v = to(e); setScroll(v); engine.onScroll(v - prev); prev = v;
+      touch.style.top = (y + (start - v)) + 'px';
+    };
+    tween(380, move((e) => start - dist * e), { ease: easeInOut, done: () => tween(320, move((e) => start - dist * (1 - e)), { ease: easeInOut, done: hideTouch }) });
+  }
+  function pick(cond, night) {
+    tap(pill, openSheet);
+    after(950, () => {
+      const el = cond ? document.querySelector(`[data-cond="${cond}"]`) : $('#nightSw');
+      tap(el, () => { if (cond) setPreview(cond); if (night != null) { state.night = night; apply(); } });
+    });
+    after(1600, closeSheet);
+  }
+  let demoRunning = false;
+  function runDemo() {
+    if (demoRunning) return; demoRunning = true;
+    tweens.length = 0; timers.length = 0; closeSheet();
+    Object.assign(PLACES.peer, { cond: 'snow', night: false, temp: -3 }); // the story of the demo
+    state.source = 'off'; state.preview = null; state.night = false; apply(true);
+    setScroll(chat.scrollHeight);
+    const at = after;
+    at(900, () => { minute++; addMessage('Wait… first snow just started!', false); });
+    at(2400, () => tap(pill, openSheet));
+    at(3500, () => tap(document.querySelector('[data-source="peer"]'), () => { state.night = null; setSource('peer'); after(500, closeSheet); }));
+    at(6400, () => typeAndSend('Send me a photo!', 1000));
+    at(9300, () => { minute++; addMessage('Everything is turning white', false); });
+    at(11800, scrollShake);
+    at(14000, () => pick('rain'));
+    at(16400, () => typeAndSend('Here it is raining instead', 1200));
+    at(19600, () => pick('storm'));
+    at(25000, () => pick('fog'));
+    at(28800, () => { pick('clear'); after(1700, () => pick(null, true)); });
+    at(36500, () => pick('snow'));
+    at(42500, () => { tap(pill, openSheet); after(950, () => tap(document.querySelector('[data-cond="clear"]'), () => { state.night = false; setPreview('clear'); })); after(1600, closeSheet); });
+    at(48000, () => { demoRunning = false; });
+  }
+  $('#playBtn').addEventListener('click', runDemo);
+
+  // ---------- real weather ---------------------------------------------------
+  async function loadReal() {
+    for (const k of ['mine', 'peer']) {
+      try { Object.assign(PLACES[k], await TW.provider.fetchCurrent(PLACES[k].lat, PLACES[k].lon)); PLACES[k].cond = PLACES[k].condition; PLACES[k].night = PLACES[k].isNight; }
+      catch (e) { /* offline or blocked: keep demo data */ }
+    }
+    if (!demoRunning) apply();
+  }
+
+  // ---------- run ------------------------------------------------------------
+  function render(now) { clock.now = now; step(); engine.frame(now); }
+  setScroll(chat.scrollHeight);
+  if (RECORD) {
+    window.__render = render;
+    render(0); runDemo();
+    window.__ready = true;
+  } else {
+    apply(true);
+    loadReal();
+    const loop = (ts) => { if (!document.hidden) render(ts); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  }
+})();
+
+</script>
+</body>
+</html>
