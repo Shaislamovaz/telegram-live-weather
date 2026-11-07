@@ -19,6 +19,16 @@ This repository holds a **working implementation** of the idea: a dependency-fre
 
 The main use case is emotional, not meteorological: you write to your mother in another city and see her first snow in your chat.
 
+## Code
+
+| File | What it is |
+|---|---|
+| [`src/weather-layer.js`](src/weather-layer.js) | **The engine** — palettes, rain, drops on glass, snow caps on bubbles, lightning, sun, stars (no dependencies) |
+| [`src/app.js`](src/app.js) | Telegram-style chat, the *Live Weather* sheet, day/night theme, scripted demo |
+| [`src/weather-provider.js`](src/weather-provider.js) | Current weather → one of 6 conditions, 30-min cache, city-level only |
+| [`src/styles.css`](src/styles.css) | iOS-style Telegram UI with an animated day/night theme |
+| [`index.html`](index.html) | Demo page that puts it together |
+
 ## Links
 
 - 🎬 **Demo video** — [`demo/live-weather-presentation-silent.mp4`](demo/live-weather-presentation-silent.mp4) · with sound: [`demo/live-weather-presentation.mp4`](demo/live-weather-presentation.mp4)
